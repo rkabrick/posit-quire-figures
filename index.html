@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Compiler-Directed Posit + Quire — Thesis Figures</title>
+<style>
+  :root {
+    --ground:#E7ECF2; --surface:#F5F7FA; --surface-2:#FBFCFD;
+    --text:#141B2B; --muted:#51607A; --accent:#B5641A; --accent-2:#2C6E72;
+    --line:rgba(20,27,43,0.14); --line-strong:rgba(20,27,43,0.30);
+    --mono:ui-monospace,"SF Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--text); font-family:var(--sans);
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; flex-direction:column;
+  }
+  .wrap { max-width:980px; margin:0 auto; padding:0 24px; width:100%; }
+  .hero {
+    position:relative; overflow:hidden; padding:84px 0 56px;
+    background:
+      linear-gradient(180deg, rgba(231,236,242,0) 60%, var(--ground) 100%),
+      repeating-linear-gradient(0deg, transparent 0 31px, var(--line) 31px 32px),
+      repeating-linear-gradient(90deg, transparent 0 31px, var(--line) 31px 32px),
+      var(--surface-2);
+  }
+  .eyebrow {
+    font-family:var(--mono); font-size:0.72rem; letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 14px; font-weight:600;
+  }
+  h1 {
+    font-family:var(--mono); font-weight:700; letter-spacing:-0.03em;
+    font-size:clamp(2rem,5.6vw,3.4rem); line-height:1.05; margin:14px 0 0; max-width:20ch;
+  }
+  h1 .lo { color:var(--muted); }
+  .lede { font-size:clamp(1.02rem,1.7vw,1.2rem); color:var(--muted); max-width:62ch; margin:22px 0 0; }
+  .meta { font-family:var(--mono); font-size:0.74rem; color:var(--muted); margin-top:18px; }
+
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:48px 0 0; }
+  .card {
+    display:block; text-decoration:none; color:inherit;
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:10px;
+    padding:26px; position:relative; overflow:hidden;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .card::before { content:""; position:absolute; top:0; left:0; right:0; height:4px; background:var(--accent); }
+  .card.two::before { background:var(--accent-2); }
+  .card:hover { transform:translateY(-3px); box-shadow:0 10px 28px rgba(20,27,43,0.12); border-color:var(--accent); }
+  .card:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+  .card .num { font-family:var(--mono); color:var(--accent); font-weight:700; font-size:0.8rem; }
+  .card.two .num { color:var(--accent-2); }
+  .card h2 { font-family:var(--mono); font-size:1.18rem; margin:10px 0 0; }
+  .card p { font-size:0.92rem; color:var(--muted); margin:10px 0 0; }
+  .card .go { font-family:var(--mono); font-size:0.78rem; color:var(--accent); margin-top:16px; display:inline-block; }
+  .card.two .go { color:var(--accent-2); }
+
+  .summary { padding:54px 0 0; }
+  .summary h3 { font-family:var(--mono); font-size:0.95rem; margin:0 0 14px; }
+  .summary ul { margin:0; padding:0; list-style:none; display:grid; gap:0; }
+  .summary li { font-size:0.92rem; padding:11px 0 11px 18px; position:relative; border-top:1px solid var(--line); color:var(--muted); }
+  .summary li:first-child { border-top:none; }
+  .summary li::before { content:"›"; position:absolute; left:0; color:var(--accent); font-family:var(--mono); }
+  .summary li b { color:var(--text); }
+  code { font-family:var(--mono); background:rgba(20,27,43,0.06); padding:0.08em 0.36em; border-radius:3px; font-size:0.86em; }
+
+  footer { margin-top:auto; padding:48px 0 56px; }
+  footer p { font-family:var(--mono); font-size:0.74rem; color:var(--muted); }
+
+  @media (max-width:720px){ .cards{ grid-template-columns:1fr; } }
+  @media (prefers-reduced-motion:reduce){ .card{ transition:none; } .card:hover{ transform:none; } }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">PhD thesis · MLIR · RISC-V Xposit · Rev SST</p>
+      <h1>Compiler-Directed <span class="lo">Posit + Quire</span> Arithmetic</h1>
+      <p class="lede">
+        An MLIR dialect that detects multiply-accumulate loops, rewrites them onto narrow posit storage feeding an
+        exact wide quire accumulator, gates each rewrite with a cost model, and lowers to PERCIVAL Xposit machine
+        words for RISC-V — measured end-to-end on the Rev SST simulator. Two pages: how it's built, and what it measures.
+      </p>
+      <p class="meta">Ryan Kabrick · figures for review · June 2026</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="cards">
+      <a class="card" href="architecture.html">
+        <span class="num">01 / SYSTEM</span>
+        <h2>Architecture</h2>
+        <p>The dialect, the four passes, the lowering to Xposit machine words, the build-and-simulate pipeline, the
+        design evolution, and the open corrections from the June data audit.</p>
+        <span class="go">Open architecture →</span>
+      </a>
+      <a class="card two" href="results.html">
+        <span class="num">02 / EVIDENCE</span>
+        <h2>Measured results</h2>
+        <p>Every headline kernel as f32, posit16, posit8, and the posit32+quire oracle. Bandwidth cuts, cache-fit
+        cycle wins, the accuracy ladder, quire exactness, and the amortization crossover.</p>
+        <span class="go">Open results →</span>
+      </a>
+    </div>
+
+    <section class="summary">
+      <h3>The short version</h3>
+      <ul>
+        <li><b>Traffic falls 2.6× / 4.5×</b> (posit16 / posit8) on reuse-heavy kernels — and inverts on single-pass kernels, which is the honest caveat.</li>
+        <li><b>9.2× faster cycles</b> on <code>gemm</code> 128³ once the narrow panel fits L1; the win is a cache-fit effect, not free everywhere.</li>
+        <li><b>posit32 + quire ≥ f32 accuracy at the same 4 bytes</b> — exact on <code>cosine_sim</code>, 8.9× better than f32 on <code>gemm</code> 256³.</li>
+        <li><b>posit8 is a bandwidth probe, not a number format</b> — its error saturates (142× on <code>conv2d</code>), which is exactly what the cost model is built to refuse.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>Self-contained pages · no tracking · source repo private · noindex</p>
+    </div>
+  </footer>
+</body>
+</html>
