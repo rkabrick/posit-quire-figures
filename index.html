@@ -40,7 +40,7 @@
   .lede { font-size:clamp(1.02rem,1.7vw,1.2rem); color:var(--muted); max-width:62ch; margin:22px 0 0; }
   .meta { font-family:var(--mono); font-size:0.74rem; color:var(--muted); margin-top:18px; }
 
-  .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:48px 0 0; }
+  .cards { display:grid; grid-template-columns:1fr; gap:18px; padding:48px 0 0; }
   .card {
     display:block; text-decoration:none; color:inherit;
     background:var(--surface); border:1px solid var(--line-strong); border-radius:10px;
@@ -82,7 +82,7 @@
       <p class="lede">
         An MLIR dialect that detects multiply-accumulate loops, rewrites them onto narrow posit storage feeding an
         exact wide quire accumulator, gates each rewrite with a cost model, and lowers to PERCIVAL Xposit machine
-        words for RISC-V — measured end-to-end on the Rev SST simulator. Two pages: how it's built, and what it measures.
+        words for RISC-V — measured end-to-end on the Rev SST simulator. Below: what it measures.
       </p>
       <p class="meta">Ryan Kabrick · figures for review · June 2026</p>
     </div>
@@ -90,15 +90,8 @@
 
   <main class="wrap">
     <div class="cards">
-      <a class="card" href="architecture.html">
-        <span class="num">01 / SYSTEM</span>
-        <h2>Architecture</h2>
-        <p>The dialect, the four passes, the lowering to Xposit machine words, the build-and-simulate pipeline, the
-        design evolution, and the open corrections from the June data audit.</p>
-        <span class="go">Open architecture →</span>
-      </a>
       <a class="card two" href="results.html">
-        <span class="num">02 / EVIDENCE</span>
+        <span class="num">EVIDENCE</span>
         <h2>Measured results</h2>
         <p>Every headline kernel as f32, posit16, posit8, and the posit32+quire oracle. Bandwidth cuts, cache-fit
         cycle wins, the accuracy ladder, quire exactness, and the amortization crossover.</p>
