@@ -224,6 +224,38 @@
   </div>
 </header>
 
+<!-- ===================== METHODOLOGY ===================== -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Methodology — what a cycle number means here</p>
+    <h2 class="sec-title">How cycles are measured, and where the to-and-back is charged</h2>
+    <p class="sec-lede">
+      Every number on this page comes from hardware counters on the Rev SST simulator (memHierarchy memory model,
+      cycle-accurate core). The harness brackets the kernel call with a pair of custom ecalls that gate Rev's
+      per-kernel counters — cycles and bytes cover <i>only</i> the bracketed region: no startup, no input
+      generation, no result checking.
+    </p>
+
+    <div class="xgrid">
+      <div class="xcard">
+        <h3>The f32→posit→f32 round trip: three regimes, all measured</h3>
+        <div class="xstat"><span class="k">1 · in-kernel conversion (default rewrite)</span><span>inside the bracket — fully charged. Amortizes with reuse: on gemm 128³ the conversion is 1.3% (posit16) / 1.7% (posit8) of compute, measured with separate conversion-only bracket variants.</span></div>
+        <div class="xstat"><span class="k">2 · single-pass kernels</span><span class="bad">charged conversion dominates and posits lose — in-kernel conversion runs ~2.3× slower than f32 on the streaming kernel (Result 04). Exactly the case the cost model refuses.</span></div>
+        <div class="xstat"><span class="k">3 · output side</span><span>the final quire rounding and posit→f32 conversion are always inside the bracket, in every baseline.</span></div>
+      </div>
+      <div class="xcard">
+        <h3>Why you can trust the ratios</h3>
+        <p class="tagline" style="margin:0">The full suite was re-simulated under two different Rev core timing
+        models (the June composite-latency model and July's pipelined multi-cycle model). Traffic and accuracy are
+        bit-identical across both; every cycle-ratio direction holds, magnitudes shift under ~20% on reuse-heavy
+        kernels. Sensitivity to the timing model is measured, not assumed. posit16 and posit8 appear in every
+        chart, the alternatives comparison (Result 05), and all 174 rows of the table below — including the rows
+        where they lose.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ===================== BANDWIDTH ===================== -->
 <section>
   <div class="wrap">
