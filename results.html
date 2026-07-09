@@ -195,9 +195,9 @@
     <p class="hero-statement">
       One curated dataset — every headline kernel, run as f32, posit16, posit8, and the posit32+quire oracle.
       It shows three things at once: <b>traffic falls cleanly</b>, <b>cycles win only when memory is the bottleneck</b>,
-      and <b>the quire buys accuracy f32 can't</b> — while posit8 is a bandwidth probe, not a number format.
+      and <b>the quire buys accuracy f32 can't</b> — while posit8 is a bandwidth probe, not a number format. Since the June version: measured Kahan, int8, fp16/bf16, tiled, end-to-end attention, and real trained-NN baselines — and a full re-sweep under the upgraded core timing model.
     </p>
-    <p class="hero-src">results/all_measured.csv · 86 rows · 31 configs · 6 baselines · + 2 adversarial accuracy probes</p>
+    <p class="hero-src">dataset v2 (post-audit Rev core model, tag dataset-v2-postaudit-rev) · 174 rows · v1 archived at dataset-v1-preaudit-rev · July 9, 2026</p>
 
     <div class="kpis">
       <div class="kpi t">
@@ -206,9 +206,9 @@
         <div class="sub">posit16 / posit8 · pre-narrowed</div>
       </div>
       <div class="kpi t">
-        <div class="big">9.2×</div>
+        <div class="big">7.5×</div>
         <div class="lab">faster cycles, gemm 128³, once the panel fits L1</div>
-        <div class="sub">posit8 · 54.1M vs 499.3M</div>
+        <div class="sub">posit8 · 67.6M vs 509.8M</div>
       </div>
       <div class="kpi t">
         <div class="big">0 error</div>
@@ -256,9 +256,9 @@
     <h2 class="sec-title">The cycle win is a cache-fit story</h2>
     <p class="sec-lede">
       Speedup vs f32 on the sized kernels (32 KiB L1, cycle-accurate). The standout is <code>gemm</code> at 128³:
-      the narrow posit panel fits in L1 where the f32 panel can't, so posit16 runs 6.3× and posit8 9.2× faster. Push to
-      256³ and the win evaporates — strided access makes the miss count width-invariant. Sequential attention keeps a
-      steady edge that grows with size.
+      the narrow posit panel fits in L1 where the f32 panel can't, so posit16 runs 5.5× and posit8 7.5× faster. Push to
+      256³ and the untiled win evaporates — strided access makes the miss count width-invariant (tiling fixes it;
+      Result 06). Sequential attention keeps a steady edge that grows with size.
     </p>
 
     <div class="legend">
@@ -269,8 +269,7 @@
     <div class="chart" id="cycChart"></div>
     <p class="note"><b>Caveat:</b> the small ideal-memory kernels (no size suffix) run cycle-neutral to slightly slower —
     the cycle win requires both the memory hierarchy and a working set that crosses the cache boundary. And the
-    <i>magnitude</i> (6–9×) is amplified by Rev's edge model — <b>no L2, no prefetcher</b> — so f32 thrashes maximally
-    (237 cyc/MAC); a real L2 + prefetch would shrink the gap. The direction holds; the size does not transfer literally.</p>
+    <i>magnitude</i> (6–9×) is amplified by Rev's edge model — <b>no L2, no prefetcher</b> — so f32 thrashes maximally; a real L2 + prefetch would shrink the gap. The direction holds; the size does not transfer literally.</p>
   </div>
 </section>
 
@@ -389,11 +388,123 @@
   </div>
 </section>
 
+<!-- ===================== VS THE ALTERNATIVES ===================== -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Result 05 — new since June · versus the alternatives</p>
+    <h2 class="sec-title">Kahan, int8, fp16/bf16 — all measured, same transformation</h2>
+    <p class="sec-lede">
+      Every alternative the committee can name now has measured rows under the identical linalg rewrite:
+      compensated summation, static-scale int8 quantization, and the IEEE narrow formats with and without a
+      separate f32 accumulator.
+    </p>
+
+    <div class="xgrid">
+      <div class="xcard lose">
+        <h3>fp32 + Kahan — compensation fixes drift, not cancellation</h3>
+        <p class="tagline">Same hoisted loop, (sum, compensation) pair — 4 dependent adds per element vs one qmadd.</p>
+        <div class="xstat"><span class="k">ill-conditioned sweep</span><span class="bad">dies at ~1e8 — same point as naive f32</span></div>
+        <div class="xstat"><span class="k">orthogonal probe (true = 2.0)</span><span class="bad">returns 0.0</span></div>
+        <div class="xstat"><span class="k">drift (its actual job)</span><span>flat 1.2e-7 across K — at +17% instructions</span></div>
+        <div class="xstat"><span class="k">gemm 128³ vs posit16+quire</span><span class="bad">5.8× slower, 2× the operand bytes</span></div>
+      </div>
+      <div class="xcard lose">
+        <h3>int8 static scale — strong until the data has range</h3>
+        <p class="tagline">i8 storage · i32 accumulate · static per-tensor scale (TensorRT-style), 1 B/element like posit8.</p>
+        <div class="xstat"><span class="k">gemm / attention (smooth data)</span><span>3.6e-3 / 4.5e-3 — beats posit8</span></div>
+        <div class="xstat"><span class="k">conv2d (cancellation)</span><span class="bad">err 31 — fails like posit8 (142)</span></div>
+        <div class="xstat"><span class="k">log-uniform 5-decade probe</span><span class="bad">1.3e-3 vs posit16+quire 3.2e-4</span></div>
+        <div class="xstat"><span class="k">illcond / ortho probes</span><span>exact — but only via clamp symmetry (±L both quantize to ±127 and cancel); any unequal-magnitude cancellation breaks it</span></div>
+      </div>
+    </div>
+
+    <div class="band" style="margin-top:18px">
+      <p class="eyebrow">16-bit head-to-head · all 14 kernels · real-NN probe</p>
+      <h3>posit16 + quire is the best single-format narrow option everywhere measured</h3>
+      <div class="qgrid">
+        <div class="q">
+          <div class="qn">~8×</div>
+          <div class="ql">better than fp16 with fp16 accumulation (the only other single-format 16-bit option), across the gemm K-sweep</div>
+          <div class="qk">single format</div>
+        </div>
+        <div class="q">
+          <div class="qn">3–45×</div>
+          <div class="ql">best narrow format on REAL data: trained MLP weights × real activations — 2.9e-2 vs fp16-mixed 9.9e-2, bf16 2.5e-1, int8 5.3</div>
+          <div class="qk">real-NN probe</div>
+        </div>
+        <div class="q">
+          <div class="qn">4 seeds</div>
+          <div class="ql">reduction-kernel accuracy is seed-stable (≤1.3×); the conv2d-class 17–165× swings are a small-denominator metric artifact, not format instability</div>
+          <div class="qk">seed spread</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TILED DECOMPOSITION ===================== -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Result 06 — new since June · tiling × narrowing, decomposed</p>
+    <h2 class="sec-title">With locality equalized, narrowing buys traffic at cycle parity</h2>
+    <p class="sec-lede">
+      transform-dialect linalg tiling (32³) composed with the automatic rewrite — plus a packed-f32 control that
+      isolates each effect. gemm 256³, cycle-accurate memory hierarchy, speedup vs untiled f32:
+    </p>
+    <div class="xgrid">
+      <div class="xcard">
+        <h3>The four-way split</h3>
+        <div class="xstat"><span class="k">f32 tiled (unpacked)</span><span>3.4×</span></div>
+        <div class="xstat"><span class="k">f32 tiled + packed</span><span class="good">6.5×</span></div>
+        <div class="xstat"><span class="k">posit16 tiled</span><span class="good">6.7× · 1.9× less traffic than packed f32</span></div>
+        <div class="xstat"><span class="k">posit8 tiled</span><span class="good">6.7× · 3.5× less traffic</span></div>
+      </div>
+      <div class="xcard">
+        <h3>What it means</h3>
+        <p class="tagline" style="margin:0">The cycle win in the cache-resident regime comes from tiling + packing;
+        narrowing then holds cycle parity while cutting the remaining traffic 1.9×/3.5× (the energy lever) and adding
+        the quire's exactness. The packing f32 needs a dedicated pass for comes <b>free</b> with the conversion
+        scratch — at 512³, unpacked f32 tiling fails outright (1.04×, strided tiles alias at the 2 KB row stride)
+        while posit16-tiled holds 6.5×. Tiled accuracy also improves: per-tile rounding at K=32 gives 1.7e-4 vs
+        9.9e-4 untiled.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SYSTEM LEVEL ===================== -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow">Result 07 — new since June · beyond primitives</p>
+    <h2 class="sec-title">The block-level story holds end to end</h2>
+    <p class="sec-lede">
+      Full attention block (QK<sup>T</sup> → softmax → PV): the rewriter converts <i>both</i> matmuls automatically —
+      two quire regions — while softmax stays f32. Mean end-to-end output error over 2,048 outputs:
+    </p>
+    <div class="xgrid">
+      <div class="xcard">
+        <h3>attention, end to end (seq 64 · d 32)</h3>
+        <div class="xstat"><span class="k">posit16 + quire (single format)</span><span class="good">1.23e-3 · 41% of f32 traffic · 0.81× cycles</span></div>
+        <div class="xstat"><span class="k">fp16 + f32 accumulator (two formats)</span><span>1.25e-3 — a tie, at 2 formats</span></div>
+        <div class="xstat"><span class="k">bf16 + f32 accumulator</span><span class="bad">9.9e-3 — 8× worse</span></div>
+        <div class="xstat"><span class="k">int8 static</span><span class="bad">0.40 — softmax outputs sit below its scale resolution</span></div>
+      </div>
+      <div class="xcard">
+        <h3>Honest note</h3>
+        <p class="tagline" style="margin:0">Softmax pushes values away from unity into posit's taper region, so the
+        near-unity precision advantage narrows here — the quire and traffic advantages are what remain. That is the
+        honest system-level shape of the claim: exact accumulation and 2× fewer bytes in one format, matching
+        two-format mixed precision without the second format.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ===================== FULL TABLE ===================== -->
 <section>
   <div class="wrap">
     <p class="eyebrow">The full dataset</p>
-    <h2 class="sec-title">All 87 measured rows</h2>
+    <h2 class="sec-title">All 174 measured rows</h2>
     <p class="sec-lede">Every row of <code>results/all_measured.csv</code>, formatted. Error coloring:
       <span class="e-great">≤1e-6</span> · <span class="e-ok">≤1e-3</span> · <span class="e-warn">≤0.1</span> ·
       <span class="e-crit">&gt;0.1</span>.</p>
@@ -413,99 +524,186 @@
 
 <footer>
   <div class="wrap">
-    <p>source: results/all_measured.csv · simulator: Rev SST (companion repo) · counts as of June 24, 2026</p>
+    <p>source: posit-dialect results (summary.csv + all_measured.csv, git tag dataset-v2-postaudit-rev) · simulator: Rev SST, post-audit build · updated July 9, 2026 · cycle counts NOT comparable to the June version (core timing model upgraded; traffic and accuracy unchanged)</p>
   </div>
 </footer>
 
 <script>
 const RAW = `kernel,size,baseline,region,cycles,data_bytes,total_bytes,max_rel_err,posits_exec
-2mm,,ieee754,baseline,350495,147488,197376,2.069974698315491e-07,0
-2mm,,posit16-oracle,total(in-kernel-conv),368320,57400,65072,0.0009619732736609876,42496
-2mm,,posit8-oracle,total(in-kernel-conv),354925,32816,38752,0.33952420949935913,42496
-3mm,,ieee754,baseline,583099,245808,328928,2.1406754058261868e-07,0
-3mm,,posit16-oracle,total(in-kernel-conv),613263,95304,106960,0.003748506773263216,70400
-3mm,,posit8-oracle,total(in-kernel-conv),590031,54336,63744,0.9523465633392334,70400
-atax,,ieee754,baseline,57425,24592,33376,2.6713664169619733e-07,0
-atax,,posit16-oracle,total(in-kernel-conv),96079,16928,22976,0.0007088587153702974,10688
-atax,,posit8-oracle,total(in-kernel-conv),93769,12832,16576,0.5723773837089539,10688
-attention_qk,,ieee754,baseline,932591,393264,524896,3.7049767342978157e-07,0
-attention_qk,,posit16-oracle,total(in-kernel-conv),968469,151608,165424,0.0002539546403568238,111616
-attention_qk,,posit8-oracle,total(in-kernel-conv),902026,86072,95984,0.11471503227949142,111616
-attention_qk_n128,128,ieee754,baseline,60737004,25165880,33555056,4.0905354126152815e-07,0
-attention_qk_n128,128,posit16-oracle,total(in-kernel-conv),57973325,8781888,9110976,0.00028877181466668844,6684672
-attention_qk_n128,128,posit8-oracle,total(in-kernel-conv),53606706,4587584,4883904,0.11697425693273544,6684672
-attention_qk_n256,256,ieee754,baseline,261194796,100663352,134218352,2.592661303424393e-07,0
-attention_qk_n256,256,ieee754-hoisted,baseline,253838416,68157496,69206704,2.592661303424393e-07,0
-attention_qk_n256,256,oracle,total(in-kernel-conv),406215544,68157512,69206928,1.0884326684390544e-07,60030976
-attention_qk_n256,256,posit16-oracle,total(in-kernel-conv),229316023,34865216,36046272,0.00024443198344670236,26607616
-attention_qk_n256,256,posit8-oracle,total(in-kernel-conv),212061716,18088000,19203520,0.11113230139017105,26607616
-attention_qk_n512,512,ieee754,baseline,1405669655,402653240,536871536,2.3223371670155757e-07,0
-attention_qk_n512,512,ieee754-hoisted,baseline,1376244027,272629816,276824752,2.3223371670155757e-07,0
-attention_qk_n512,512,oracle,total(in-kernel-conv),1986327507,272629832,276824976,1.069643289497435e-07,240123904
-attention_qk_n512,512,posit16-oracle,total(in-kernel-conv),974146188,138936384,143394240,0.00023321482876781374,106168320
-attention_qk_n512,512,posit8-oracle,total(in-kernel-conv),843564571,71827520,76154304,0.11245258152484894,106168320
-bicg,,ieee754,baseline,57370,24592,33376,3.154625574097736e-07,0
-bicg,,posit16-oracle,total(in-kernel-conv),96004,16936,22992,0.0002465553698129952,10688
-bicg,,posit8-oracle,total(in-kernel-conv),93750,12840,16592,0.10927204042673111,10688
-conv2d,,ieee754,baseline,1183790,497688,663984,0.00017414269677828997,0
-conv2d,,posit16-oracle,total(in-kernel-conv),1258508,192416,209088,0.14230342209339142,141120
-conv2d,,posit8-oracle,total(in-kernel-conv),1202746,109464,120656,142.3928680419922,141120
-cosine_sim,,ieee754,baseline,19155,7184,10528,7.390069072243932e-07,0
-cosine_sim,,posit16-oracle,total(in-kernel-conv),49354,9260,13656,0.00041430574492551386,5391
-cosine_sim,,posit8-oracle,total(in-kernel-conv),48591,7724,10648,0.3292005658149719,5391
-cosine_sim_n2048,2048,ieee754,baseline,151698,57360,82144,7.989665959939884e-07,0
-cosine_sim_n2048,2048,ieee754-hoisted,baseline,145566,32796,33016,7.989665959939884e-07,0
-cosine_sim_n2048,2048,oracle,total(in-kernel-conv),270904,49180,49976,0.0,43023
-cosine_sim_n2048,2048,posit16-oracle,total(in-kernel-conv),397158,73772,99864,0.0014094705693423748,43023
-cosine_sim_n2048,2048,posit8-oracle,total(in-kernel-conv),382043,61484,74904,0.907910943031311,43023
-dot_stream,,ieee754,baseline,2630523,524304,524452,0.0,0
-dot_stream_linalg,,ieee754,total(in-kernel-conv),2696050,786448,1048800,0.0,0
-dot_stream_linalg,,posit16-oracle,total(in-kernel-conv),6284619,786452,1049000,0.0,458757
-dot_stream_linalg,,posit8-oracle,total(in-kernel-conv),6002055,655380,786984,0.9979166388511658,458757
-dot_stream_p16,,positraw,compute(pre-narrowed),2069239,262160,262372,0.0,458757
-dot_stream_p8,,positraw,compute(pre-narrowed),1789087,131088,131300,0.9979166388511658,458757
-dwconv2d,,ieee754,baseline,876965,248864,332224,0.00013630176545120776,0
-dwconv2d,,posit16-oracle,total(in-kernel-conv),1440531,175728,228224,0.25812292098999023,115488
-dwconv2d,,posit8-oracle,total(in-kernel-conv),1370352,134256,165488,129.831787109375,115488
-gemm,,ieee754,baseline,232621,98320,131488,2.815608581840934e-07,0
-gemm,,ieee754-hoisted,baseline,225715,66576,68000,2.815608581840934e-07,0
-gemm,,posit16-oracle,total(in-kernel-conv),242139,37912,41904,0.00023622740991413593,27904
-gemm,,posit8-oracle,total(in-kernel-conv),233544,21520,24608,0.11195699125528336,27904
-gemm_n128,128,ieee754,baseline,499305795,25165840,33554848,6.88999477915786e-07,0
-gemm_n128,128,posit16-oracle,total(in-kernel-conv),78977438,8585232,8717280,0.0005104824085719883,6438912
-gemm_n128,128,posit8-oracle,total(in-kernel-conv),54085240,4390928,4490464,0.21916310489177704,6438912
-gemm_n256,256,ieee754,baseline,3993705795,201326608,268435872,1.0584542451397283e-06,0
-gemm_n256,256,ieee754-hoisted,baseline,3977317210,134479888,134742432,1.0584542451397283e-06,0
-gemm_n256,256,oracle,total(in-kernel-conv),4295697324,134479896,134742960,1.192089627011228e-07,117768192
-gemm_n256,256,posit16-oracle,total(in-kernel-conv),3965821032,67895312,68420576,0.0009906900813803077,50921472
-gemm_n256,256,posit8-oracle,total(in-kernel-conv),3948919102,34340880,34735328,0.2521922290325165,50921472
-gemm_n64,64,ieee754-hoisted,baseline,7234657,2113552,2130336,4.6116002749840845e-07,0
-gemm_pre16_n128,128,positraw,compute(pre-narrowed),77498516,8388624,8454688,0.0008539709378965199,6438912
-gemm_pre16cv_n128,128,positraw,convert,1057107,131088,196960,0.0008539709378965199,6438912
-gemm_pre8_n128,128,positraw,compute(pre-narrowed),52897901,4194320,4260576,0.3333333432674408,6438912
-gemm_pre8cv_n128,128,positraw,convert,1056380,131088,164192,0.3333333432674408,6438912
-gemm_pre_f32_n128,128,ieee754,compute(pre-narrowed),497255045,16777232,16843232,0.0,0
-gemm_pre_f32_n256,256,ieee754,compute(pre-narrowed),0,0,0,,0
-gesummv,,ieee754,baseline,59438,24852,33892,2.2567768098724628e-07,0
-gesummv,,posit16-oracle,total(in-kernel-conv),96209,17204,23780,0.00020674448751378804,10688
-gesummv,,posit8-oracle,total(in-kernel-conv),93869,13108,17252,0.07512956112623215,10688
-knn_l2,,ieee754,baseline,134838,55320,75824,1.0541315305090393e-06,0
-knn_l2,,posit16-oracle,total(in-kernel-conv),177096,29328,37408,0.0018544158665463328,19960
-knn_l2,,posit8-oracle,total(in-kernel-conv),168641,19600,25120,1.0112972259521484,19960
-layernorm,,ieee754,baseline,11638,4112,6304,1.801373628040892e-07,0
-layernorm,,posit16-oracle,total(in-kernel-conv),22327,5156,7880,0.0005146524636074901,1797
-layernorm,,posit8-oracle,total(in-kernel-conv),22123,4644,6984,0.24444910883903503,1797
-layernorm_n2048,2048,ieee754,baseline,92274,32784,49312,7.989665959939884e-07,0
-layernorm_n2048,2048,ieee754-hoisted,baseline,90231,24596,32936,7.989665959939884e-07,0
-layernorm_n2048,2048,oracle,total(in-kernel-conv),135414,32788,41320,7.119936640265223e-07,14341
-layernorm_n2048,2048,posit16-oracle,total(in-kernel-conv),174490,40996,57992,0.000678322627209127,14341
-layernorm_n2048,2048,posit8-oracle,total(in-kernel-conv),172593,36900,49992,0.9069136381149292,14341
-mlp,,ieee754,baseline,67788,28560,38752,1.5624841580574866e-06,0
-mlp,,posit16-oracle,total(in-kernel-conv),109626,19672,26672,0.00038731511449441314,12242
-mlp,,posit8-oracle,total(in-kernel-conv),107172,14936,19472,0.6383833885192871,12242
-mvt,,ieee754,baseline,57439,24592,33376,2.0678783130279044e-07,0
-mvt,,posit16-oracle,total(in-kernel-conv),96124,16936,22992,0.00023825513198971748,10688
-mvt,,posit8-oracle,total(in-kernel-conv),93801,12840,16592,0.10143878310918808,10688`;
+2mm,,ieee754,baseline,355843,147488,197376,2.069974698315491e-07,0
+2mm,,ieee754-hoisted,baseline,267739,100384,103168,2.069974698315491e-07,0
+2mm,,posit16-oracle,total(in-kernel-conv),310097,57400,65072,0.0009619732736609876,42496
+2mm,,posit8-oracle,total(in-kernel-conv),295399,32816,38752,0.33952420949935913,42496
+3mm,,ieee754,baseline,593881,245808,328928,2.1406754058261868e-07,0
+3mm,,ieee754-hoisted,baseline,445279,166960,171232,2.1406754058261868e-07,0
+3mm,,posit16-oracle,total(in-kernel-conv),515014,95304,106960,0.003748506773263216,70400
+3mm,,posit8-oracle,total(in-kernel-conv),490896,54336,63744,0.9523465633392334,70400
+atax,,ieee754,baseline,57236,24592,33376,2.6713664169619733e-07,0
+atax,,ieee754-hoisted,baseline,43294,16656,17440,2.6713664169619733e-07,0
+atax,,posit16-oracle,total(in-kernel-conv),81366,16928,22976,0.0007088587153702974,10688
+atax,,posit8-oracle,total(in-kernel-conv),76877,12832,16576,0.5723773837089539,10688
+attention_qk,,ieee754,baseline,947087,393264,524896,3.7049767342978157e-07,0
+attention_qk,,ieee754-hoisted,baseline,705657,266288,270944,3.7049767342978157e-07,0
+attention_qk,,int8-static,total(in-kernel-conv),2240341,88780,100540,0.004506397992372513,0
+attention_qk,,posit16-oracle,total(in-kernel-conv),818152,151608,165424,0.0002539546403568238,111616
+attention_qk,,posit8-oracle,total(in-kernel-conv),746384,86072,95984,0.11471503227949142,111616
+attention_qk_n128,128,ieee754,baseline,92152648,25165880,33555056,4.0905354126152815e-07,0
+attention_qk_n128,128,ieee754-hoisted,baseline,49683467,17039416,17302192,4.0905354126152815e-07,0
+attention_qk_n128,128,oracle,total(in-kernel-conv),80505734,17039432,17302416,1.1920162990008976e-07,15007744
+attention_qk_n128,128,posit16-oracle,total(in-kernel-conv),71720692,8781888,9110976,0.00028877181466668844,6684672
+attention_qk_n128,128,posit8-oracle,total(in-kernel-conv),67331453,4587584,4883904,0.11697425693273544,6684672
+attention_qk_n256,256,ieee754,baseline,386004143,100663352,134218352,2.592661303424393e-07,0
+attention_qk_n256,256,ieee754-hoisted,baseline,312717268,68157496,69206704,2.592661303424393e-07,0
+attention_qk_n256,256,oracle,total(in-kernel-conv),426508541,68157512,69206928,1.0884326684390544e-07,60030976
+attention_qk_n256,256,posit16-oracle,total(in-kernel-conv),284159277,34865216,36046272,0.00024443198344670236,26607616
+attention_qk_n256,256,posit8-oracle,total(in-kernel-conv),266867268,18088000,19203520,0.11113230139017105,26607616
+attention_qk_n512,512,ieee754,baseline,1887713277,402653240,536871536,2.3223371670155757e-07,0
+attention_qk_n512,512,ieee754-hoisted,baseline,1608585713,272629816,276824752,2.3223371670155757e-07,0
+attention_qk_n512,512,oracle,total(in-kernel-conv),2065901313,272629832,276824976,1.069643289497435e-07,240123904
+attention_qk_n512,512,posit16-oracle,total(in-kernel-conv),1192828463,138936384,143394240,0.00023321482876781374,106168320
+attention_qk_n512,512,posit8-oracle,total(in-kernel-conv),1062566019,71827520,76154304,0.11245258152484894,106168320
+attn_e2e,,bf16-auto,total,12777004,1395888,2005784,3.023688554763794,0
+attn_e2e,,fp16-mixed,total,19053378,1396904,2009416,0.14119264483451843,0
+attn_e2e,,ieee754,total,12698494,3424400,5032600,7.619635289302096e-05,0
+attn_e2e,,int8-static,total(in-kernel-conv),62337383,887480,1484792,100.8873291015625,0
+attn_e2e,,posit16-oracle,total,10226535,1392792,1998504,0.35859885811805725,837632
+attn_e2e,,posit8-oracle,total,9862538,868504,1463592,334.0254821777344,837632
+attn_pre16_n128,128,positraw,compute(pre-narrowed),69721800,8388664,8651696,0.0,6684672
+attn_pre16_n256,256,positraw,compute(pre-narrowed),278473974,33554488,34603952,0.0,26607616
+attn_pre16cv_n128,128,positraw,convert,1142852,131136,197248,0.0,6684672
+attn_pre16cv_n256,256,positraw,convert,2284132,262208,393856,0.0,26607616
+attn_pre8_n128,128,positraw,compute(pre-narrowed),65359553,4194360,4457200,0.1794871836900711,6684672
+attn_pre8_n256,256,positraw,compute(pre-narrowed),261224363,16777272,17826544,0.18210862576961517,26607616
+attn_pre8cv_n128,128,positraw,convert,1122932,131136,164480,0.1794871836900711,6684672
+attn_pre8cv_n256,256,positraw,convert,2244061,262208,328320,0.18210862576961517,26607616
+attn_pre_f32_n128,128,ieee754,compute(pre-narrowed),72391692,16777264,17040032,0.0,0
+attn_pre_f32_n256,256,ieee754,compute(pre-narrowed),307623887,67108912,68158112,0.0,0
+bicg,,ieee754,baseline,56889,24592,33376,3.154625574097736e-07,0
+bicg,,ieee754-hoisted,baseline,42998,16656,17440,3.154625574097736e-07,0
+bicg,,posit16-oracle,total(in-kernel-conv),81218,16936,22992,0.0002465553698129952,10688
+bicg,,posit8-oracle,total(in-kernel-conv),76841,12840,16592,0.10927204042673111,10688
+conv2d,,ieee754,baseline,1197942,497688,663984,0.00017414269677828997,0
+conv2d,,ieee754-hoisted,baseline,894160,336408,341424,0.00017414269677828997,0
+conv2d,,int8-static,total(in-kernel-conv),9897652,111884,124540,31.432086944580078,0
+conv2d,,posit16-oracle,total(in-kernel-conv),1036333,192416,209088,0.14230342209339142,141120
+conv2d,,posit8-oracle,total(in-kernel-conv),986617,109464,120656,142.3928680419922,141120
+cosine_sim,,ieee754,baseline,17050,7184,10528,7.390069072243932e-07,0
+cosine_sim,,ieee754-hoisted,baseline,11620,4124,4408,7.390069072243932e-07,0
+cosine_sim,,posit16-oracle,total(in-kernel-conv),41576,9260,13656,0.00041430574492551386,5391
+cosine_sim,,posit8-oracle,total(in-kernel-conv),39138,7724,10648,0.3292005658149719,5391
+cosine_sim_n2048,2048,ieee754,baseline,217585,57360,82144,7.989665959939884e-07,0
+cosine_sim_n2048,2048,ieee754-hoisted,baseline,163954,32796,33016,7.989665959939884e-07,0
+cosine_sim_n2048,2048,oracle,total(in-kernel-conv),284780,49180,49976,0.0,43023
+cosine_sim_n2048,2048,posit16-oracle,total(in-kernel-conv),467737,73772,99864,0.0014094705693423748,43023
+cosine_sim_n2048,2048,posit8-oracle,total(in-kernel-conv),444139,61484,74904,0.907910943031311,43023
+dot_stream,,ieee754,baseline,3041286,524304,524452,0.0,0
+dot_stream,,ieee754_lat150,baseline,3453038,524304,524452,0.0,0
+dot_stream,,ieee754_lat200,baseline,3862679,524304,524452,0.0,0
+dot_stream,,ieee754_lpddr4,baseline,3059596,524304,524452,0.0,0
+dot_stream_bal,,ieee754,total,3041889,524304,524452,0.0,0
+dot_stream_linalg,,ieee754,total(in-kernel-conv),3575043,786448,1048800,0.0,0
+dot_stream_linalg,,posit16-oracle,total(in-kernel-conv),7010409,786452,1049000,0.0,458757
+dot_stream_linalg,,posit8-oracle,total(in-kernel-conv),6651309,655380,786984,0.9979166388511658,458757
+dot_stream_p16,,positraw,compute(pre-narrowed),2483507,262160,262372,0.0,458757
+dot_stream_p16,,positraw_lat150,compute(pre-narrowed),2689884,262160,262372,0.0,458757
+dot_stream_p16,,positraw_lat200,compute(pre-narrowed),2893090,262160,262372,0.0,458757
+dot_stream_p16_bal,,positraw,compute(pre-narrowed),2485334,262160,262372,0.0,458757
+dot_stream_p8,,positraw,compute(pre-narrowed),2204426,131088,131300,0.9979166388511658,458757
+dot_stream_p8,,positraw_lat150,compute(pre-narrowed),2308489,131088,131300,0.9979166388511658,458757
+dot_stream_p8,,positraw_lat200,compute(pre-narrowed),2411042,131088,131300,0.9979166388511658,458757
+dot_stream_p8_bal,,positraw,compute(pre-narrowed),2204516,131088,131300,0.0,458757
+dotprod_illcond,,ieee754,accuracy (ideal-mem),2127,936,2144,1.0,0
+dotprod_illcond,,ieee754-kahan,accuracy (ideal-mem),2117,792,1856,1.0,0
+dotprod_illcond,,int8-static,accuracy (ideal-mem),8730,2124,7200,0.0,0
+dotprod_illcond,,oracle,accuracy (ideal-mem),2584,792,1920,0.0,468
+dotprod_illcond,,posit16-oracle,accuracy (ideal-mem),4115,1008,2928,0.0,468
+dotprod_illcond_f64,,ieee754,accuracy (ideal-mem),2155,1584,2944,1.0,0
+dotprod_logu,,ieee754,accuracy (ideal-mem),112391,49168,65760,4.327623173594475e-06,0
+dotprod_logu,,ieee754-kahan,accuracy (ideal-mem),98231,32788,33000,1.3402872589551862e-08,0
+dotprod_logu,,int8-static,accuracy (ideal-mem),346625,41048,50604,0.001288253115490079,0
+dotprod_logu,,oracle,accuracy (ideal-mem),122958,32788,33064,1.3402872589551862e-08,28677
+dotprod_logu,,posit16-oracle,accuracy (ideal-mem),221149,49172,65960,0.00032146371086128056,28677
+dotprod_logu,,posit8-oracle,accuracy (ideal-mem),208607,40980,49704,0.3256450593471527,28677
+dotprod_logu_sweep,,ieee754,accuracy (ideal-mem),789716,344176,459424,6.8385784288693685e-06,0
+dotprod_logu_sweep,,ieee754-kahan,accuracy (ideal-mem),688024,229516,230040,3.60580472147376e-08,0
+dotprod_logu_sweep,,int8-static,accuracy (ideal-mem),2481732,287336,347956,0.020742978900671005,0
+dotprod_logu_sweep,,oracle,accuracy (ideal-mem),860934,229516,230168,4.241575624064353e-08,200739
+dotprod_logu_sweep,,posit16-oracle,accuracy (ideal-mem),1549652,344204,460952,0.0010754617396742105,200739
+dotprod_ortho,,ieee754,accuracy (ideal-mem),151,64,224,1.0,0
+dotprod_ortho,,ieee754-kahan,accuracy (ideal-mem),143,52,264,1.0,0
+dotprod_ortho,,oracle,accuracy (ideal-mem),176,52,328,0.0,33
+dotprod_ortho,,posit_noquire,accuracy (ideal-mem),204,52,456,1.0,52
+dwconv2d,,ieee754,baseline,618763,248864,332224,0.00013630176545120776,0
+dwconv2d,,ieee754-hoisted,baseline,481933,175136,184704,0.00013630176545120776,0
+dwconv2d,,posit16-oracle,total(in-kernel-conv),878097,175728,228224,0.25812292098999023,115488
+dwconv2d,,posit8-oracle,total(in-kernel-conv),855264,134256,165488,129.831787109375,115488
+gemm,,ieee754,baseline,236754,98320,131488,2.815608581840934e-07,0
+gemm,,ieee754-hoisted,baseline,176664,66576,68000,2.815608581840934e-07,0
+gemm,,ieee754-kahan,total,390901,66576,68064,1.1702306323968514e-07,0
+gemm,,int8-static,total(in-kernel-conv),565751,21900,25500,0.003609823063015938,0
+gemm,,posit16-oracle,total(in-kernel-conv),204382,37912,41904,0.00023622740991413593,27904
+gemm,,posit8-oracle,total(in-kernel-conv),195043,21520,24608,0.11195699125528336,27904
+gemm_n128,128,ieee754,baseline,509800040,25165840,33554848,6.88999477915786e-07,0
+gemm_n128,128,ieee754-hoisted,baseline,486852153,16842768,16908704,6.88999477915786e-07,0
+gemm_n128,128,ieee754-kahan,total,535156665,16842768,16908704,1.1919389919512469e-07,0
+gemm_n128,128,oracle,total(in-kernel-conv),522720804,16842776,16909232,1.1919389919512469e-07,14761984
+gemm_n128,128,posit16-oracle,total(in-kernel-conv),92306169,8585232,8717280,0.0005104824085719883,6438912
+gemm_n128,128,posit8-oracle,total(in-kernel-conv),67576468,4390928,4490464,0.21916310489177704,6438912
+gemm_n256,256,ieee754,baseline,4077605029,201326608,268435872,1.0584542451397283e-06,0
+gemm_n256,256,ieee754-hoisted,baseline,4061497130,134479888,134742432,1.0584542451397283e-06,0
+gemm_n256,256,ieee754-tiled,total,1215816650,201326664,268436304,1.0584542451397283e-06,0
+gemm_n256,256,ieee754-tiled-packed,total,629277724,140509248,146803008,1.0584542451397283e-06,0
+gemm_n256,256,oracle,total(in-kernel-conv),4318798650,134479896,134742960,1.192089627011228e-07,117768192
+gemm_n256,256,posit16-oracle,total(in-kernel-conv),4050365419,67895312,68420576,0.0009906900813803077,50921472
+gemm_n256,256,posit16-tiled,total,605467787,73400392,77597200,0.00016852765111252666,55050240
+gemm_n256,256,posit8-oracle,total(in-kernel-conv),4033384882,34340880,34735328,0.2521922290325165,50921472
+gemm_n256,256,posit8-tiled,total,610898857,39845960,42994128,0.07287169247865677,55050240
+gemm_n512,512,ieee754-tiled,total,32664240786,1610612816,2147484576,9.104591072173207e-07,0
+gemm_n512,512,ieee754-tiled-packed,total,5038700349,1124073544,1174407376,9.104591072173207e-07,0
+gemm_n512,512,posit16-tiled,total,4868426813,587202640,620759200,9.133022831520066e-05,440401920
+gemm_n512,512,posit8-tiled,total,4928048084,318767184,343935456,0.04159855842590332,440401920
+gemm_pre16_n128,128,positraw,compute(pre-narrowed),90675750,8388624,8454688,0.0008539709378965199,6438912
+gemm_pre16_n256,256,positraw,compute(pre-narrowed),4044963075,67108880,67371552,0.0009680542279966176,50921472
+gemm_pre16cv_n128,128,positraw,convert,1134742,131088,196960,0.0008539709378965199,6438912
+gemm_pre16cv_n256,256,positraw,convert,4534071,524304,786784,0.0009680542279966176,50921472
+gemm_pre8_n128,128,positraw,compute(pre-narrowed),66242755,4194320,4260576,0.3333333432674408,6438912
+gemm_pre8_n256,256,positraw,compute(pre-narrowed),4028049843,33554448,33817312,0.5879275798797607,50921472
+gemm_pre8cv_n128,128,positraw,convert,1115017,131088,164192,0.3333333432674408,6438912
+gemm_pre8cv_n256,256,positraw,convert,4452834,524304,655712,0.5879275798797607,50921472
+gemm_pre_f32_n128,128,ieee754,compute(pre-narrowed),507738149,16777232,16843232,0.0,0
+gemm_pre_f32_n256,256,ieee754,compute(pre-narrowed),4061008435,134217744,134480352,0.0,0
+gesummv,,ieee754,baseline,57662,24852,33892,2.2567768098724628e-07,0
+gesummv,,ieee754-hoisted,baseline,42949,16916,17956,2.2567768098724628e-07,0
+gesummv,,posit16-oracle,total(in-kernel-conv),81162,17204,23780,0.00020674448751378804,10688
+gesummv,,posit8-oracle,total(in-kernel-conv),76678,13108,17252,0.07512956112623215,10688
+knn_l2,,ieee754,baseline,133975,55320,75824,1.0541315305090393e-06,0
+knn_l2,,ieee754-hoisted,baseline,98690,36472,37872,1.0541315305090393e-06,0
+knn_l2,,posit16-oracle,total(in-kernel-conv),148868,29328,37408,0.0018544158665463328,19960
+knn_l2,,posit8-oracle,total(in-kernel-conv),138681,19600,25120,1.0112972259521484,19960
+layernorm,,ieee754,baseline,10044,4112,6304,1.801373628040892e-07,0
+layernorm,,ieee754-hoisted,baseline,8021,3092,4264,1.801373628040892e-07,0
+layernorm,,posit16-oracle,total(in-kernel-conv),18930,5156,7880,0.0005146524636074901,1797
+layernorm,,posit8-oracle,total(in-kernel-conv),17854,4644,6984,0.24444910883903503,1797
+layernorm_n2048,2048,ieee754,baseline,124156,32784,49312,7.989665959939884e-07,0
+layernorm_n2048,2048,ieee754-hoisted,baseline,105950,24596,32936,7.989665959939884e-07,0
+layernorm_n2048,2048,oracle,total(in-kernel-conv),153046,32788,41320,7.119936640265223e-07,14341
+layernorm_n2048,2048,posit16-oracle,total(in-kernel-conv),211297,40996,57992,0.000678322627209127,14341
+layernorm_n2048,2048,posit8-oracle,total(in-kernel-conv),206422,36900,49992,0.9069136381149292,14341
+mlp,,ieee754,baseline,65972,28560,38752,1.5624841580574866e-06,0
+mlp,,ieee754-hoisted,baseline,48551,19256,20080,1.5624841580574866e-06,0
+mlp,,posit16-oracle,total(in-kernel-conv),92555,19672,26672,0.00038731511449441314,12242
+mlp,,posit8-oracle,total(in-kernel-conv),87624,14936,19472,0.6383833885192871,12242
+mvt,,ieee754,baseline,56751,24592,33376,2.0678783130279044e-07,0
+mvt,,ieee754-hoisted,baseline,43049,16656,17440,2.0678783130279044e-07,0
+mvt,,posit16-oracle,total(in-kernel-conv),81217,16936,22992,0.00023825513198971748,10688
+mvt,,posit8-oracle,total(in-kernel-conv),77290,12840,16592,0.10143878310918808,10688
+nn_layer,,bf16-auto,total,5648312,557176,579376,0.254965603351593,0
+nn_layer,,fp16-mixed,total,8842190,557176,580016,0.09851766377687454,0
+nn_layer,,fp16-native,total,38841723,9077911,17624687,1.3392740488052368,0
+nn_layer,,ieee754,total,5689336,1572880,2097568,3.4734472137643024e-05,0
+nn_layer,,int8-static,total(in-kernel-conv),25824993,296076,312732,5.254541873931885,0
+nn_layer,,posit16-oracle,total,4476052,557080,578480,0.029299139976501465,415744
+nn_layer,,posit8-oracle,total,4326052,294928,310368,46875.0,415744`;
 
 const rows = RAW.trim().split('\n').slice(1).map(l => {
   const c = l.split(',');

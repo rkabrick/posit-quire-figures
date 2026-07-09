@@ -84,7 +84,7 @@
         exact wide quire accumulator, gates each rewrite with a cost model, and lowers to PERCIVAL Xposit machine
         words for RISC-V — measured end-to-end on the Rev SST simulator. Below: what it measures.
       </p>
-      <p class="meta">Ryan Kabrick · figures for review · June 2026</p>
+      <p class="meta">Ryan Kabrick · figures for review · updated July 2026 (dataset v2)</p>
     </div>
   </header>
 
@@ -93,8 +93,9 @@
       <a class="card two" href="results.html">
         <span class="num">EVIDENCE</span>
         <h2>Measured results</h2>
-        <p>Every headline kernel as f32, posit16, posit8, and the posit32+quire oracle. Bandwidth cuts, cache-fit
-        cycle wins, the accuracy ladder, quire exactness, and the amortization crossover.</p>
+        <p>Every headline kernel as f32, posit16, posit8, and the posit32+quire oracle — now with measured Kahan, int8,
+        fp16/bf16, tiled, end-to-end attention, and real trained-NN baselines. Bandwidth cuts, cache-fit cycle wins,
+        the accuracy ladder, quire exactness, and the amortization crossover.</p>
         <span class="go">Open results →</span>
       </a>
     </div>
@@ -103,9 +104,10 @@
       <h3>The short version</h3>
       <ul>
         <li><b>Traffic falls 2.6× / 4.5×</b> (posit16 / posit8) on reuse-heavy kernels — and inverts on single-pass kernels, which is the honest caveat.</li>
-        <li><b>9.2× faster cycles</b> on <code>gemm</code> 128³ once the narrow panel fits L1; the win is a cache-fit effect, not free everywhere.</li>
+        <li><b>7.5× faster cycles</b> on <code>gemm</code> 128³ once the narrow panel fits L1 (dataset v2, upgraded core timing model); with tiling + packing equalized, narrowing holds cycle parity at 1.9–3.5× less traffic.</li>
         <li><b>posit32 + quire ≥ f32 accuracy at the same 4 bytes</b> — exact on <code>cosine_sim</code>, 8.9× better than f32 on <code>gemm</code> 256³.</li>
-        <li><b>posit8 is a bandwidth probe, not a number format</b> — its error saturates (142× on <code>conv2d</code>), which is exactly what the cost model is built to refuse.</li>
+        <li><b>posit8 is a bandwidth probe, not a number format</b> — its error saturates (142× on <code>conv2d</code>), which is exactly what the cost model is built to refuse. int8 fails the same kernel the same way (31×).</li>
+        <li><b>Kahan dies where naive f32 dies</b> on the ill-conditioned sweep (~1e8) and returns 0.0 on the orthogonal probe — compensation fixes drift, not cancellation; the quire is exact to 1e18.</li>
       </ul>
     </section>
   </main>
